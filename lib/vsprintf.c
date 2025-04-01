@@ -56,9 +56,8 @@
 #include <linux/string_helpers.h>
 #include "kstrtox.h"
 
-/* Disable pointer hashing if requested */
-bool no_hash_pointers __ro_after_init;
-EXPORT_SYMBOL_GPL(no_hash_pointers);
+bool hash_pointers __ro_after_init = true;
+EXPORT_SYMBOL_GPL(hash_pointers);
 
 noinline
 static unsigned long long simple_strntoull(const char *startp, char **endp, unsigned int base, size_t max_chars)
@@ -825,9 +824,9 @@ static char *default_pointer(char *buf, char *end, const void *ptr,
 {
 	/*
 	 * default is to _not_ leak addresses, so hash before printing,
-	 * unless no_hash_pointers is specified on the command line.
+	 * unless hash_pointers is set to false.
 	 */
-	if (unlikely(no_hash_pointers))
+	if (unlikely(!hash_pointers))
 		return pointer_string(buf, end, ptr, spec);
 
 	return ptr_to_id(buf, end, ptr, spec);
@@ -2259,30 +2258,53 @@ char *resource_or_range(const char *fmt, char *buf, char *end, void *ptr,
 	return resource_string(buf, end, ptr, spec, fmt);
 }
 
-int __init no_hash_pointers_enable(char *str)
+int __init hash_pointers_mode_setup(char *str)
 {
-	if (no_hash_pointers)
-		return 0;
+	if (!str) {
+		pr_warn("Hash pointers mode empty, fallback to auto.\n");
+	}
 
-	no_hash_pointers = true;
+	if (!str || (strncmp(str, "auto", 4) == 0))   {
+		pr_info("Hash pointers mode set to auto.\n");
+#ifdef CONFIG_SLUB_DEBUG
+		hash_pointers = false;
+#else
+		hash_pointers = true;
+#endif
+	} else if (strncmp(str, "never", 5) == 0 ) {
+		pr_info("Hash pointers mode set to never.\n");
+		hash_pointers = false;
+        } else if (strncmp(str, "always", 6) == 0) {
+		pr_info("Hash pointers mode set to always.\n");
+		hash_pointers = true;
+	} else {
+		pr_warn("Unknown hash_pointers mode specified, assuming auto.\n");
+#ifdef CONFIG_SLUB_DEBUG
+		hash_pointers = false;
+#else
+		hash_pointers = true;
+#endif
+	}
 
-	pr_warn("**********************************************************\n");
-	pr_warn("**   NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE   **\n");
-	pr_warn("**                                                      **\n");
-	pr_warn("** This system shows unhashed kernel memory addresses   **\n");
-	pr_warn("** via the console, logs, and other interfaces. This    **\n");
-	pr_warn("** might reduce the security of your system.            **\n");
-	pr_warn("**                                                      **\n");
-	pr_warn("** If you see this message and you are not debugging    **\n");
-	pr_warn("** the kernel, report this immediately to your system   **\n");
-	pr_warn("** administrator!                                       **\n");
-	pr_warn("**                                                      **\n");
-	pr_warn("**   NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE   **\n");
-	pr_warn("**********************************************************\n");
+	if (!hash_pointers) {
+		pr_warn("**********************************************************\n");
+		pr_warn("**   NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE   **\n");
+		pr_warn("**                                                      **\n");
+		pr_warn("** This system shows unhashed kernel memory addresses   **\n");
+		pr_warn("** via the console, logs, and other interfaces. This    **\n");
+		pr_warn("** might reduce the security of your system.            **\n");
+		pr_warn("**                                                      **\n");
+		pr_warn("** If you see this message and you are not debugging    **\n");
+		pr_warn("** the kernel, report this immediately to your system   **\n");
+		pr_warn("** administrator!                                       **\n");
+		pr_warn("**                                                      **\n");
+		pr_warn("**   NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE   **\n");
+		pr_warn("**********************************************************\n");
+	}
 
-	return 0;
+        return 0;
 }
-early_param("no_hash_pointers", no_hash_pointers_enable);
+early_param("hash_pointers", hash_pointers_mode_setup);
 
 /* Used for Rust formatting ('%pA'). */
 char *rust_fmt_argument(char *buf, char *end, void *ptr);
