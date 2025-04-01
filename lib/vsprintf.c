@@ -56,9 +56,9 @@
 #include <linux/string_helpers.h>
 #include "kstrtox.h"
 
-/* Disable pointer hashing if requested */
-bool no_hash_pointers __ro_after_init;
-EXPORT_SYMBOL_GPL(no_hash_pointers);
+bool hash_pointers __ro_after_init = true;
+EXPORT_SYMBOL_GPL(hash_pointers);
+enum pointer_hashing_policy hash_pointers_mode;
 
 noinline
 static unsigned long long simple_strntoull(const char *startp, char **endp, unsigned int base, size_t max_chars)
@@ -825,9 +825,9 @@ static char *default_pointer(char *buf, char *end, const void *ptr,
 {
 	/*
 	 * default is to _not_ leak addresses, so hash before printing,
-	 * unless no_hash_pointers is specified on the command line.
+	 * unless hash_pointers is set to false.
 	 */
-	if (unlikely(no_hash_pointers))
+	if (unlikely(!hash_pointers))
 		return pointer_string(buf, end, ptr, spec);
 
 	return ptr_to_id(buf, end, ptr, spec);
@@ -2259,12 +2259,12 @@ char *resource_or_range(const char *fmt, char *buf, char *end, void *ptr,
 	return resource_string(buf, end, ptr, spec, fmt);
 }
 
-int __init no_hash_pointers_enable(char *str)
+int __init hash_pointers_disable(void)
 {
-	if (no_hash_pointers)
+	if (!hash_pointers)
 		return 0;
 
-	no_hash_pointers = true;
+	hash_pointers = false;
 
 	pr_warn("**********************************************************\n");
 	pr_warn("**   NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE   **\n");
@@ -2282,7 +2282,32 @@ int __init no_hash_pointers_enable(char *str)
 
 	return 0;
 }
-early_param("no_hash_pointers", no_hash_pointers_enable);
+
+static int __init hash_pointers_mode_parse(char *str)
+{
+	if (!str) {
+		pr_warn("Hash pointers mode empty, fallback to auto.\n");
+	}
+
+	if (!str || (strncmp(str, "auto", 4) == 0))   {
+		pr_info("Hash pointers mode set to auto.\n");
+		hash_pointers_mode = AUTO;
+	} else if (strncmp(str, "never", 5) == 0 ) {
+		pr_info("Hash pointers mode set to never.\n");
+		hash_pointers_mode = NEVER;
+		hash_pointers_disable();
+	} else if (strncmp(str, "always", 6) == 0) {
+		pr_info("Hash pointers mode set to always.\n");
+		hash_pointers_mode = ALWAYS;
+	} else {
+		pr_warn("Unknown hash_pointers mode %s specified, assuming auto.\n", str);
+		hash_pointers_mode = AUTO;
+	}
+
+        return 0;
+}
+early_param("hash_pointers", hash_pointers_mode_parse);
+
 
 /* Used for Rust formatting ('%pA'). */
 char *rust_fmt_argument(char *buf, char *end, void *ptr);

@@ -303,7 +303,7 @@ plain(void)
 {
 	int err;
 
-	if (no_hash_pointers) {
+	if (!hash_pointers) {
 		pr_warn("skipping plain 'p' tests");
 		skipped_tests += 2;
 		return;
